@@ -1,27 +1,28 @@
 import json
 import re
 import discord
-from nltk.stem.snowball import SnowballStemmer 
+from nltk.stem import WordNetLemmatizer as wnl 
 from nltk import word_tokenize
 from nltk.tokenize.treebank import TreebankWordDetokenizer
 
 with open("wordbook.json", "rb") as f:
     WORDBOOK = json.load(f)
 
-Stemmer = SnowballStemmer("english")
+Lemmatizer = wnl()
+Detokenizer = TreebankWordDetokenizer()
 
 def correct_message(s: str) -> list:
     result = []
     tokens = word_tokenize(s)
     wrong_found = False
     for token in tokens:
-        stem = Stemmer.stem(token)
-        if stem in WORDBOOK:
-            wrong_found = True
-            result.append(WORDBOOK[stem])
-        elif token in WORDBOOK:
+        stem = Lemmatizer.lemmatize(token)
+        if token in WORDBOOK:
             wrong_found = True
             result.append(WORDBOOK[token])
+        elif stem in WORDBOOK:
+            wrong_found = True
+            result.append(WORDBOOK[stem])
         else:
             result.append(token)
 
@@ -46,11 +47,21 @@ async def on_message(message):
     if not wrong_found:
         return
 
-    detokenizer = TreebankWordDetokenizer()
-    detokenized_rights = detokenizer.detokenize(rights)
+    detokenized_rights = Detokenizer.detokenize(rights)
     await message.channel.send(detokenized_rights)
 
 
-with open("token.txt", 'r') as f:
-    token = f.read().strip()
-client.run(token)
+
+if __name__ == "__main__":
+    with open("token.txt", 'r') as f:
+        token = f.read().strip()
+    client.run(token)
+    
+    while True:
+        s = input("Please enter a sentence")
+        rights, wrong_found = correct_message(s)
+        if not wrong_found:
+            continue
+        
+        detoknized_rights = Detokenizer.detokenize(rights)
+        print(detoknized_rights)

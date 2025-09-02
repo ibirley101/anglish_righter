@@ -77,18 +77,6 @@ def correct_message(s: str) -> list:
 
         index += 1
     return result, wrong_found
-    for token in tokens:
-        lemma = Lemmatizer.lemmatize(token)
-        if token in WORDBOOK:
-            wrong_found = True
-            result.append(WORDBOOK[token])
-        elif lemma in WORDBOOK:
-            wrong_found = True
-            result.append(WORDBOOK[lemma])
-        else:
-            result.append(token)
-
-    return result, wrong_found
 
 
 intents = discord.Intents.default()

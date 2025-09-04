@@ -1,6 +1,7 @@
 import json
 import re
 import discord
+from discord.ext import commands
 from nltk.stem import WordNetLemmatizer as wnl
 from nltk import word_tokenize
 from nltk.tag import pos_tag
@@ -19,10 +20,8 @@ ROOT = Node("", parent=None)
 for key in WORDBOOK.keys():
     words = key.split()
     parent = ROOT
-    phrase = ""
     for word in words:
-        phrase += f" {word}"
-        word = word.lower()
+        word = word.lower().strip()
         child = search.find(parent, lambda node: node.name == word, maxlevel=2)
         if child is None:
             child = Node(word, parent=parent)
@@ -33,16 +32,50 @@ for child in ROOT.children:
     ROOT_CHILDREN[child.name] = child
 
 
+def standin_parse(command):
+    parts = command.split(":")
+    if len(parts) != 2:
+        return None, None
+
+    wordstring, standin = parts
+    if wordstring == "" or standin == "":
+        return None, None
+
+    return wordstring.strip(), standin.strip()
+
+
+def standin_word(wordstring, standin):
+    if wordstring in WORDBOOK:
+        # for now we won't allow replacements for words that already exist
+        return False
+
+    WORDBOOK[wordstring.lower()] = standin
+
+    words = wordstring.split()
+    parent = ROOT
+    for word in words:
+        word = word.lower().strip()
+        child = search.find(parent, lambda node: node.name == word, maxlevel=2)
+        if child is None:
+            child = Node(word, parent=parent)
+            if parent.is_root:
+                ROOT_CHILDREN[word] = child
+        parent = child
+
+    return True
+
+
 def treebank_to_wnl(tag):
     if tag.startswith("N"):
-        return 'n'
+        return "n"
     elif tag.startswith("V"):
-        return 'v'
+        return "v"
     elif tag.startswith("J"):
-        return 'a'
+        return "a"
     elif tag.startswith("R"):
-        return 'r'
-    return 's'
+        return "r"
+    return "s"
+
 
 def read_wordbook(word, tag):
     entry = WORDBOOK[word]
@@ -51,7 +84,7 @@ def read_wordbook(word, tag):
         if not replacement:
             return entry
         return replacement[0]
-    
+
     # type is dictionary
     if tag in entry:
         return entry[tag]
@@ -123,6 +156,8 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
+bot = commands.Bot(command_prefix="$", intents=intents)
+
 
 @client.event
 async def on_ready():
@@ -133,6 +168,33 @@ async def on_ready():
 async def on_message(message):
     if message.author == client.user:
         return
+
+    # jank bot command system because we're a client
+    if message.content.startswith("$sayback"):
+        await message.channel.send(message.content[9:])
+        return
+
+    if message.content.startswith("$standin"):
+        wordstring, standin = standin_parse(message.content[9:])
+        if wordstring is None or standin is None:
+            await message.channel.send("Body: $standin [WORD] : [STANDIN]")
+            return
+
+        result = standin_word(wordstring, standin)
+        if not result:
+            await message.channel.send(
+                f'"{wordstring}" already in wordbook as "{WORDBOOK[wordstring]}".'
+            )
+            return
+        await message.channel.send(f"Taking {wordstring} as {standin}.")
+        return
+
+    if message.content.startswith("$spare"):
+        with open("wordbook.json", "w") as f:
+            json.dump(WORDBOOK, f)
+        await message.channel.send("New words spared.")
+        return
+
 
     rights, wrong_found = correct_message(message.content)
     if not wrong_found:
@@ -149,10 +211,34 @@ if __name__ == "__main__":
 
     # while True:
     #     s = input("Please enter a sentence: ")
+    #     # jank bot command system because we're a client
+    #     if s.startswith("$sayback"):
+    #         print(s[9:])
+    #         continue
+
+    #     if s.startswith("$standin"):
+    #         wordstring, standin = standin_parse(s[9:])
+    #         if wordstring is None or standin is None:
+    #             print("Body: $standin [WORD] : [STANDIN]")
+    #             continue
+
+    #         result = standin_word(wordstring, standin)
+    #         if not result:
+    #             print(f"\"{wordstring}\" already in wordbook as \"{WORDBOOK[wordstring]}\".")
+    #             continue
+    #         first_word = wordstring.split()[0].strip()
+    #         continue
+
+    #     if s.startswith("$spare"):
+    #         with open("wordbook.json", "w") as f:
+    #             json.dump(WORDBOOK, f)
+    #         print("Saved.")
+    #         continue
+
+
     #     rights, wrong_found = correct_message(s)
     #     if not wrong_found:
     #         continue
 
-    #     detoknized_rights = Detokenizer.detokenize(rights)
-    #     print("\n\n")
-    #     print(detoknized_rights)
+    #     detokenized_rights = Detokenizer.detokenize(rights)
+    #     print(detokenized_rights)
